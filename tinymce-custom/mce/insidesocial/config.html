@@ -1,0 +1,196 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Inside Social: Add a Gateway to your Post</title>
+        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="http://cdn1.insidesoci.al/static/css/bootstrap.css">
+        <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+        <script type="text/javascript" src="../../../../../../wp-includes/js/tinymce/tiny_mce_popup.js"></script>
+        <script type="text/javascript" src="https://www.insidesoci.al/socialgateway/js/jquery.enhanced.cookie.js"></script>
+        <script type="text/javascript" src="https://www.insidesoci.al/socialgateway/js/knockout-2.1.0.js"></script>
+    </head>
+    <body>
+        <img src="https://www.insidesoci.al/socialgateway/img/logo.png" alt="insidesocial">
+        <div id="SocialAuth" class="hidden">
+            <p>For easy access to all of your social gateways connect this plugin with your Inside Social account.</p>
+            <a href="javascript:doauth()">Connect</a>
+        </div>
+
+        <div id="MainContent" class="hidden">
+            <ul class="nav nav-tabs">
+                <li class="active"><a href="javascript:void(0);" data-target="#tab1">Gateways</a></li>
+                <li><a href="javascript:void(0);" data-target="#tab2">Instructions</a></li> 
+            </ul>
+            <div id="tabcontent">
+                <div id="tab1" class="tab">
+                    <h3 id="loadingmsg">Loading Gateways...</h3>
+                    <form id="GatewayChooser" class="hidden">
+                        <fieldset>
+                            <legend>Select a Gateway</legend>
+                                    <select id="gateway-selection" data-bind="foreach: gateways">
+                                        <option data-bind="value: company,text: name"></option>
+                                    </select>
+                        </fieldset>
+                        <p>
+                        <a href="javascript:GalleryTiny.insert(GalleryTiny.e)">Show a Gateway On this Post</a>
+                        </p>
+                        <a href="javascript:deauth()">Deauthorize Plugin</a>
+                    </form>
+                </div>
+                <div id="tab2" class="tab hidden">
+                    <h2>Instructions</h2>
+                     <h3>Showing a Modal Gateway:</h3>
+                    <ol> 
+                        <li>
+                            Select the gateway you'd like to show from the dropdown.
+                        </li>
+                        <li>
+                            Click "Show a gateway on this post link."
+                        </li>
+                        <li>
+                            Save your post.
+                        </li>
+                    </ol>
+                    <h3>Showing an Incontent (aka Inline) Social Gateway:</h3>
+                    <ol> 
+                        <li>To show a gateway within your wordpress content, first select and highlight the content you'd like to be replaced with a gateway.
+                        </li>
+                        <li>
+                            Once your content is selected, click the Inside Social button in the visual post editor.
+                        </li>
+                        <li>
+                            Select the gateway you'd like to show from the dropdown.
+                        </li>
+                        <li>
+                            Click "Show a gateway on this post link."
+                        </li>
+                        <li>
+                            Save your post.
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            var GalleryTiny = {
+                e: '',
+                init: function (e) {
+                    GalleryTiny.e = e;
+                    tinyMCEPopup.resizeToInnerSize();
+                },
+                insert: function createGalleryShortcode(e) {
+                   
+                    var el = document.getElementById('gateway-selection');
+                    var selectedOption = el.options[el.selectedIndex];
+                    var id = selectedOption.text;
+                    var company = selectedOption.value;
+
+                    var output = "";
+
+                    var content = tinymce.editors[0].selection.getContent();
+
+                    output = "[is-gateway";
+
+                    // strip out any bad characters
+                    var c = company.replace(/[\s]+/g, '').replace(/[^0-9a-zA-Z\-]+/g, '');
+
+                    output = output + " name=\"" + c + "\" id=\"" + id + "\"]";
+
+                    if(content) {
+                        output = output + content + "[/is-gateway]"
+                    }
+
+                    tinyMCEPopup.execCommand('mceReplaceContent', false, output);
+
+                    tinyMCEPopup.close();
+                }
+            }
+            tinyMCEPopup.onInit.add(GalleryTiny.init, GalleryTiny);
+
+            var vm = function() {
+                this.gateways = ko.observableArray([]);
+            };
+        
+            var model = new vm();
+        
+            ko.applyBindings(model);
+
+
+            //var host = 'http://localhost';
+            var host = 'https://www.insidesoci.al';
+
+            function deauth() {
+                $.cookie('is-auth-token',null);
+                $('#MainContent').hide();
+                $('#SocialAuth').show();
+            }
+
+            function doauth() {
+
+                var url = encodeURIComponent(window.location.href.replace('config.html','auth.html'));
+
+                url = host + '/authorize?url=' + url;
+
+                var win = window.open(url);
+                var token;
+                var chckr = setInterval(function() {
+                    if(win.closed) {
+                        win = undefined;
+                        clearInterval(chckr);
+                        $.cookie('is-auth-token',token);
+                        $('#SocialAuth').hide();
+                        $('#MainContent').show();
+                        getGatewayData(token);
+                    }
+                    try {
+                        if(!token && win && win.location.hash) {
+                            token = win.location.hash.replace('#','');
+                            win.close();
+                        }
+                    } catch(e) {
+                        //nothing
+                    }
+                }, 1000);
+            }
+
+            function getGatewayData(token) {
+                $('#loadingmsg').show();
+
+                $.ajax({
+                        url: host + '/gateways',
+                        headers: {'bearer': token},
+                        dataType: 'JSON',
+                        success: function(data) {
+                            model.gateways(data.gateways);
+                            $('#loadingmsg').hide();
+                            $('#GatewayChooser').removeClass('hidden');
+                        }
+                    });
+            }
+
+            $(document).on('ready',function(e){
+                var token = $.cookie('is-auth-token');
+
+                if(!token) {
+                    $('#SocialAuth').removeClass('hidden');
+                } else {
+                    //get gateway data
+                    $('#MainContent').show();
+                    getGatewayData(token);
+                }
+
+                $('.nav a').on('click',function(el) {
+                    var that = this;
+                    $('.nav li').removeClass('active');
+                    $(that).parent().addClass('active');
+                    var sel = $(that).attr('data-target');
+                    $('.tab').hide();
+                    $(sel).show();
+
+                });
+            });
+
+        </script>
+    </body>
+</html>
